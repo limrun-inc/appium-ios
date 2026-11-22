@@ -456,11 +456,23 @@ export class WebDriverAgent {
     return createWdaStartupStrategy(context);
   }
 
+  /**
+   * The port of the WDA URL. A URL on its scheme's default port, such as
+   * `https://host/`, has an empty `port`, and the proxy needs the number.
+   */
+  private urlPort(): number {
+    const port = parseInt(this.url.port ?? '', 10);
+    if (port) {
+      return port;
+    }
+    return this.url.protocol === 'https:' ? 443 : 80;
+  }
+
   private setupProxies(sessionId: string): void {
     const proxyOpts: any = {
       log: this.log,
       server: this.url.hostname ?? undefined,
-      port: parseInt(this.url.port ?? '', 10) || undefined,
+      port: this.urlPort(),
       base: this.basePath,
       timeout: this.wdaConnectionTimeout,
       keepAlive: true,
@@ -526,7 +538,7 @@ export class WebDriverAgent {
     const noSessionProxy = new NoSessionProxy({
       scheme: this.url.protocol ? this.url.protocol.replace(':', '') : 'http',
       server: this.url.hostname ?? undefined,
-      port: parseInt(this.url.port ?? '', 10) || undefined,
+      port: this.urlPort(),
       base: this.basePath,
       timeout: 3000,
       headers: this.args.extraRequestHeaders,
