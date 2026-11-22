@@ -122,3 +122,4 @@ build
 xcuserdata
 *.tgz
 .vscode/settings.json
+limrun-dist/
