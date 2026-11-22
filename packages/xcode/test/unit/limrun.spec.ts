@@ -39,7 +39,7 @@ describe('limrun', function () {
     registerLimrunClient('udid-a', a);
     registerLimrunClient('udid-b', b);
     assert.equal(limrunClientFor('udid-a'), a);
-    assert.equal(limrunClientFor('udid-b'), b);
+    assert.equal(limrunClientFor('UDID-B'), b);
     assert.equal(anyLimrunClient(), b);
   });
 

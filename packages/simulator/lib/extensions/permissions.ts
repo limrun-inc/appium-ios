@@ -1,9 +1,11 @@
 import type {SimPermissionService} from '@appium/coresim';
 import {timing, util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
+import {limrunClientFor} from 'appium-xcode';
 import {waitForCondition} from 'asyncbox';
 import {exec} from 'teen_process';
 
+import {isLimrunSimulator} from '../limrun/index.js';
 import type {HasNativeSimctl} from '../native/types.js';
 import type {CoreSimulator, ProcessInfo, SupportsAppPermissions} from '../types.js';
 
@@ -144,6 +146,16 @@ async function execSimctlPrivacy(
   service: string,
   bundleId: string,
 ): Promise<void> {
+  if (isLimrunSimulator()) {
+    // simctl runs on the Limrun host that owns the simulator.
+    const {code, stdout, stderr} = await limrunClientFor(this.udid)
+      .simctl(['privacy', this.udid, action, service, bundleId])
+      .wait();
+    if (code !== 0) {
+      throw new Error(`simctl privacy ${action} ${service} failed: ${(stderr || stdout).trim()}`);
+    }
+    return;
+  }
   const args = this.devicesSetPath ? ['--set', this.devicesSetPath] : [];
   await exec('xcrun', ['simctl', ...args, 'privacy', this.udid, action, service, bundleId]);
 }

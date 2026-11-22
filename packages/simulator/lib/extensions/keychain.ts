@@ -3,6 +3,7 @@ import path from 'node:path';
 import {fs, mkdirp, tempDir, util} from '@appium/support';
 import {exec} from 'teen_process';
 
+import {isLimrunSimulator, LimrunUnsupportedError} from '../limrun/index.js';
 import {LAUNCHCTL_PATH, spawnAndWait} from '../native/spawn.js';
 import type {HasNativeSimctl} from '../native/types.js';
 import type {CoreSimulator, InteractsWithKeychain} from '../types.js';
@@ -22,6 +23,9 @@ type CoreSimulatorWithKeychain = CoreSimulator & InteractsWithKeychain & HasNati
  * @returns True if the backup operation was successful.
  */
 export async function backupKeychains(this: CoreSimulatorWithKeychain): Promise<boolean> {
+  if (isLimrunSimulator()) {
+    throw new LimrunUnsupportedError('Backing up keychains');
+  }
   const resetBackupPath = async (newPath: string | null | undefined) => {
     if (typeof this._keychainsBackupPath === 'string' && (await fs.exists(this._keychainsBackupPath))) {
       await fs.unlink(this._keychainsBackupPath);
@@ -72,6 +76,9 @@ export async function restoreKeychains(
   this: CoreSimulatorWithKeychain,
   excludePatterns: string[] | string = [],
 ): Promise<boolean> {
+  if (isLimrunSimulator()) {
+    throw new LimrunUnsupportedError('Restoring keychains');
+  }
   if (typeof this._keychainsBackupPath !== 'string' || !(await fs.exists(this._keychainsBackupPath))) {
     throw new Error(`The keychains backup archive does not exist. Are you sure it was created before?`);
   }
@@ -122,6 +129,9 @@ export async function restoreKeychains(
  * @throws {Error} If keychain cleanup has failed.
  */
 export async function clearKeychains(this: CoreSimulatorWithKeychain): Promise<void> {
+  if (isLimrunSimulator()) {
+    throw new LimrunUnsupportedError('Clearing keychains');
+  }
   const plistPath = path.resolve(await this.getLaunchDaemonsRoot(), 'com.apple.securityd.plist');
   if (!(await fs.exists(plistPath))) {
     throw new Error(`Cannot clear keychains because '${plistPath}' does not exist`);

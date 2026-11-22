@@ -14,12 +14,12 @@ const clients = new Map<string, Ios.InstanceClient>();
  * A later registration for the same udid replaces the earlier one.
  */
 export function registerLimrunClient(udid: string, client: Ios.InstanceClient): void {
-  clients.set(udid, client);
+  clients.set(key(udid), client);
 }
 
 /** Forgets the client of the given udid, usually when its session ends. */
 export function unregisterLimrunClient(udid: string): void {
-  clients.delete(udid);
+  clients.delete(key(udid));
 }
 
 /**
@@ -28,7 +28,7 @@ export function unregisterLimrunClient(udid: string): void {
  * @throws {Error} If no Limrun session registered that udid
  */
 export function limrunClientFor(udid: string): Ios.InstanceClient {
-  const client = clients.get(udid);
+  const client = clients.get(key(udid));
   if (!client) {
     throw new Error(
       `No Limrun instance serves the simulator '${udid}'. ` +
@@ -36,6 +36,11 @@ export function limrunClientFor(udid: string): Ios.InstanceClient {
     );
   }
   return client;
+}
+
+// Callers spell udids in either case; CoreSimulator prints them uppercase.
+function key(udid: string): string {
+  return udid.toUpperCase();
 }
 
 /** Lists the udids that have a registered client. */

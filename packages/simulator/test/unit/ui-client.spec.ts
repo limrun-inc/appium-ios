@@ -34,7 +34,7 @@ function makeFakeSim(uiClientBundleId: string, sandbox: sinon.SinonSandbox) {
   };
 }
 
-describe('ui-client', function () {
+describe('ui-client', {skip: 'host-only: the Limrun fork leaves the Simulator app to the Limrun host'}, function () {
   let sandbox: sinon.SinonSandbox;
 
   beforeEach(function () {
