@@ -61,10 +61,14 @@
     "@types/node": "^26.6.5",
     "@types/sinon": "^22.0.2",
     "pem": "^1.8.3",
-    "sinon": "^22.0.0"
+    "sinon": "^22.0.0",
+    "@limrun/api": "^0.73.4"
   },
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
     "npm": ">=10"
+  },
+  "peerDependencies": {
+    "@limrun/api": ">=0.74.0 <1"
   }
 }
