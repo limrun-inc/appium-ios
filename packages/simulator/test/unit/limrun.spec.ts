@@ -200,6 +200,33 @@ describe('LimrunNativeSimctl', function () {
     await assert.rejects(simctl.getPermission(UDID, 'notifications', 'com.example.app'), /cannot be read/);
   });
 
+  it('lists installed apps with their simctl properties', async function () {
+    instance.outputs.listapps = {
+      stdout: `{
+    "com.apple.mobilesafari" =     {
+        ApplicationType = System;
+        CFBundleIdentifier = "com.apple.mobilesafari";
+        CFBundleName = Safari;
+    };
+    "com.example.app" =     {
+        ApplicationType = User;
+        CFBundleIdentifier = "com.example.app";
+        CFBundleName = Example;
+        UIFileSharingEnabled = 1;
+    };
+}`,
+    };
+    const apps = await simctl.installedApps(UDID);
+    assert.deepEqual(instance.calls[0].args, ['listapps', UDID]);
+    assert.deepEqual(Object.keys(apps).sort(), ['com.apple.mobilesafari', 'com.example.app']);
+    assert.deepEqual(apps['com.example.app'], {
+      ApplicationType: 'User',
+      CFBundleIdentifier: 'com.example.app',
+      CFBundleName: 'Example',
+      UIFileSharingEnabled: '1',
+    });
+  });
+
   it('reports running apps as processes', async function () {
     assert.deepEqual(await simctl.listProcesses(UDID), [
       {pid: 4242, group: 'UIKitApplication', name: 'com.apple.mobilesafari'},

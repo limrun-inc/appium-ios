@@ -258,13 +258,9 @@ export class LimrunNativeSimctl implements NativeSimctlApi {
   }
 
   async installedApps(udid: string): Promise<Record<string, unknown>> {
-    const apps = await client(udid).listApps();
-    return Object.fromEntries(
-      apps.map((a) => [
-        a.bundleId,
-        {CFBundleIdentifier: a.bundleId, CFBundleName: a.name, ApplicationType: a.installType},
-      ]),
-    );
+    // `simctl listapps` prints every app's properties, the same dictionary coresim reads locally.
+    const {stdout} = await simctl(udid, ['listapps', udid]);
+    return parseAsciiPlist(stdout) as Record<string, unknown>;
   }
 
   /**
