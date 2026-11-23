@@ -9,6 +9,7 @@ import {
   getPath,
   getVersion,
   limrunClientFor,
+  limrunUdids,
   registerLimrunClient,
   unregisterLimrunClient,
 } from '../../lib/index.js';
@@ -29,8 +30,9 @@ function fakeClient(): Ios.InstanceClient {
 
 describe('limrun', function () {
   afterEach(function () {
-    unregisterLimrunClient('udid-a');
-    unregisterLimrunClient('udid-b');
+    for (const udid of limrunUdids()) {
+      unregisterLimrunClient(udid, limrunClientFor(udid));
+    }
   });
 
   it('finds each client by the udid it serves', function () {
@@ -41,6 +43,17 @@ describe('limrun', function () {
     assert.equal(limrunClientFor('udid-a'), a);
     assert.equal(limrunClientFor('UDID-B'), b);
     assert.equal(anyLimrunClient(), b);
+  });
+
+  it('keeps a newer client when an older session on the same udid ends', function () {
+    const older = fakeClient();
+    const newer = fakeClient();
+    registerLimrunClient('udid-a', older);
+    registerLimrunClient('udid-a', newer);
+    unregisterLimrunClient('udid-a', older);
+    assert.equal(limrunClientFor('udid-a'), newer);
+    unregisterLimrunClient('udid-a', newer);
+    assert.throws(() => limrunClientFor('udid-a'), /No Limrun instance serves the simulator 'udid-a'/);
   });
 
   it('fails loudly for a udid no session registered', function () {
