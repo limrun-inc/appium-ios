@@ -2,9 +2,10 @@ import path from 'node:path';
 
 import {fs, plist, util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
+import {limrunClientFor} from 'appium-xcode';
 import {AsyncLock} from 'asyncbox';
-import {exec} from 'teen_process';
 
+import {isLimrunSimulator, parseAsciiPlist} from '../limrun/index.js';
 import {DEFAULTS_PATH, LAUNCHCTL_PATH, spawnAndWait} from '../native/spawn.js';
 import type {HasNativeSimctl} from '../native/types.js';
 import {
@@ -255,10 +256,21 @@ export async function configureLocalization(
 
   let previousAppleLanguages: unknown = null;
   if (globalPrefs.AppleLanguages) {
-    const absolutePrefsPath = path.join(this.getDir(), 'Library', 'Preferences', GLOBAL_PREFS_PLIST);
     try {
-      const {stdout} = await exec('plutil', ['-convert', 'json', absolutePrefsPath, '-o', '-']);
-      previousAppleLanguages = JSON.parse(stdout).AppleLanguages;
+      // The preferences file is on the Limrun host, so read it with `defaults` there.
+      const execution = limrunClientFor(this.udid).simctl([
+        'spawn',
+        this.udid,
+        'defaults',
+        'read',
+        GLOBAL_PREFS_PLIST,
+        'AppleLanguages',
+      ]);
+      const {code, stdout, stderr} = await execution.wait();
+      if (code !== 0) {
+        throw new Error(stderr || stdout);
+      }
+      previousAppleLanguages = parseAsciiPlist(stdout);
     } catch (e: any) {
       this.log.debug(`Cannot retrieve the current value of the 'AppleLanguages' preference: ${e.message}`);
     }
@@ -301,11 +313,16 @@ export async function configureLocalization(
           `${SERVICES_FOR_TRANSLATION}. This might have unexpected side effects, ` +
           `see https://github.com/appium/appium/issues/19440 for more details`,
       );
-      await Promise.all(
-        SERVICES_FOR_TRANSLATION.map((service) =>
-          spawnAndWait(this._native, this.udid, LAUNCHCTL_PATH, ['stop', service]),
-        ),
-      );
+      if (isLimrunSimulator()) {
+        // The instance restarts its own services; there is no launchctl to spawn.
+        await limrunClientFor(this.udid).restartServices([...SERVICES_FOR_TRANSLATION]);
+      } else {
+        await Promise.all(
+          SERVICES_FOR_TRANSLATION.map((service) =>
+            spawnAndWait(this._native, this.udid, LAUNCHCTL_PATH, ['stop', service]),
+          ),
+        );
+      }
     }
   }
 
@@ -339,6 +356,15 @@ export async function updatePreferences(
   devicePrefs: DevicePreferences = {},
   commonPrefs: LegacySimulatorPreferences = {},
 ): Promise<boolean> {
+  if (isLimrunSimulator()) {
+    // These preferences configure the Simulator app on the host, which Limrun manages.
+    if (Object.keys(devicePrefs).length > 0 || Object.keys(commonPrefs).length > 0) {
+      this.log.info(
+        `The Limrun host manages the Simulator app; ignoring preferences ${JSON.stringify({...devicePrefs, ...commonPrefs})}`,
+      );
+    }
+    return false;
+  }
   if (Object.keys(devicePrefs).length > 0) {
     this.log.debug(`Setting preferences of ${this.udid} Simulator to ${JSON.stringify(devicePrefs)}`);
   }

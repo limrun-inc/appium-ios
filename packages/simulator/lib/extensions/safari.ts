@@ -4,6 +4,7 @@ import {fs, timing} from '@appium/support';
 import type {StringRecord} from '@appium/types';
 import {waitForCondition} from 'asyncbox';
 
+import {isLimrunSimulator, LimrunUnsupportedError} from '../limrun/index.js';
 import type {HasNativeSimctl} from '../native/types.js';
 import type {CoreSimulator, InteractsWithSafariBrowser, InteractsWithApps, HasSettings, ProcessInfo} from '../types.js';
 import {MOBILE_SAFARI_BUNDLE_ID, SAFARI_STARTUP_TIMEOUT_MS} from '../utils/index.js';
@@ -87,6 +88,9 @@ export async function openUrl(this: CoreSimulatorWithSafariBrowser, url: string)
  * @param keepPrefs Whether to keep Safari preferences from being deleted.
  */
 export async function scrubSafari(this: CoreSimulatorWithSafariBrowser, keepPrefs: boolean = true): Promise<void> {
+  if (isLimrunSimulator()) {
+    throw new LimrunUnsupportedError('Scrubbing Safari data');
+  }
   try {
     await this.terminateApp(MOBILE_SAFARI_BUNDLE_ID);
   } catch {}

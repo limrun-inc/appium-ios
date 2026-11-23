@@ -9,3 +9,6 @@ import {createSimulator, listSimulators, killAllSimulators, simExists} from './u
 export {getSimulator, killAllSimulators, simExists, createSimulator, listSimulators, BaseSimulator};
 
 export type * from './types.js';
+
+// Limrun: callers check this before acting on simulator pids or paths, which belong to the Limrun host.
+export {isLimrunSimulator, LimrunUnsupportedError, parseAsciiPlist} from './limrun/index.js';

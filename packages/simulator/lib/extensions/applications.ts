@@ -1,12 +1,9 @@
-import path from 'node:path';
-
-import {fs, plist, util} from '@appium/support';
+import {util} from '@appium/support';
+import {limrunClientFor} from 'appium-xcode';
 import {waitForCondition} from 'asyncbox';
 
-import {getSystemRoot} from '../native/system-root.js';
 import type {HasNativeSimctl} from '../native/types.js';
 import type {AppContainerType, CoreSimulator, InteractsWithApps, LaunchAppOptions} from '../types.js';
-import {readBundleIdFromPlist} from '../utils/index.js';
 
 declare module '../simulator-xcode-15.js' {
   interface SimulatorXcode15 extends InteractsWithApps {}
@@ -38,34 +35,17 @@ export async function getUserInstalledBundleIdsByBundleName(
   this: CoreSimulatorWithApps,
   bundleName: string,
 ): Promise<string[]> {
-  const appsRoot = path.resolve(this.getDir(), 'Containers', 'Bundle', 'Application');
-  // glob all Info.plist from simdir/data/Containers/Bundle/Application
-  const infoPlists = await fs.glob('*/*.app/Info.plist', {
-    cwd: appsRoot,
-    absolute: true,
-  });
-  if (infoPlists.length === 0) {
-    return [];
-  }
-
-  const bundleInfoPromises: Promise<PlistBundleInfo | null>[] = [];
-  for (const infoPlist of infoPlists) {
-    bundleInfoPromises.push(
-      (async () => {
-        try {
-          return (await plist.parsePlistFile(infoPlist)) as PlistBundleInfo;
-        } catch {
-          return null;
-        }
-      })(),
-    );
-  }
-  const bundleInfos = (await Promise.all(bundleInfoPromises)).filter((info): info is PlistBundleInfo =>
-    util.isPlainObject(info),
-  );
-  const bundleIds = bundleInfos
+  // The simulator lives on a Limrun host, so the instance lists its apps instead of a local glob.
+  const apps = (await this._native.installedApps(this.udid)) as Record<
+    string,
+    PlistBundleInfo & {ApplicationType?: string}
+  >;
+  const bundleIds = Object.values(apps)
     .filter(
-      ({CFBundleName, CFBundleIdentifier}) => CFBundleName === bundleName && typeof CFBundleIdentifier === 'string',
+      ({CFBundleName, CFBundleIdentifier, ApplicationType}) =>
+        CFBundleName === bundleName &&
+        typeof CFBundleIdentifier === 'string' &&
+        ApplicationType?.toLowerCase() === 'user',
     )
     .map(({CFBundleIdentifier}) => CFBundleIdentifier as string);
   if (bundleIds.length === 0) {
@@ -164,32 +144,7 @@ export async function appInfo(this: CoreSimulatorWithApps, bundleId: string): Pr
  * @return True if the given application is installed.
  */
 export async function isAppInstalled(this: CoreSimulatorWithApps, bundleId: string): Promise<boolean> {
-  try {
-    const appContainer = await this.getAppContainer(bundleId);
-    return appContainer.endsWith('.app') && (await fs.exists(appContainer));
-  } catch {
-    // get_app_container fails for system applications, as well as appInfo
-    return (await fetchSystemAppBundleIds.call(this)).has(bundleId);
-  }
-}
-
-/**
- * Collects and caches bundle identifiers of system Simulator apps.
- *
- * @returns A set of system app bundle identifiers
- */
-async function fetchSystemAppBundleIds(this: CoreSimulatorWithApps): Promise<Set<string>> {
-  if (this._systemAppBundleIds) {
-    return this._systemAppBundleIds;
-  }
-
-  const appsRoot = path.resolve(await getSystemRoot(this._native, this.udid), 'Applications');
-  const allApps = (await fs.readdir(appsRoot)).filter((x) => x.endsWith('.app')).map((x) => path.join(appsRoot, x));
-  const bundleIds = await Promise.all(
-    allApps.map((appRoot) => readBundleIdFromPlist(path.resolve(appRoot, 'Info.plist'))),
-  );
-  this._systemAppBundleIds = new Set(bundleIds.filter((x): x is string => x !== null));
-  return this._systemAppBundleIds;
+  return await this._native.isAppInstalled(this.udid, bundleId);
 }
 
 /**
@@ -209,19 +164,10 @@ export async function isAppRunning(this: CoreSimulatorWithApps, bundleId: string
  * @throws {Error} if the given app is not installed.
  */
 export async function scrubApp(this: CoreSimulatorWithApps, bundleId: string): Promise<void> {
-  const appDataRoot = await this.getAppContainer(bundleId, 'data');
-  const appFiles = await fs.glob('**/*', {
-    cwd: appDataRoot,
-    nodir: true,
-    absolute: true,
-  });
-  this.log.info(`Found ${appFiles.length} ${bundleId} app ${util.pluralize('file', appFiles.length, false)} to scrub`);
-  if (appFiles.length === 0) {
-    return;
-  }
-
+  // The data container is on the Limrun host; the instance wipes it and relaunches the app.
+  await limrunClientFor(this.udid).softReset(bundleId, {strategy: 'data'});
+  this.log.info(`Scrubbed the data of ${bundleId}`);
   try {
     await this.terminateApp(bundleId);
   } catch {}
-  await Promise.all(appFiles.map((p) => fs.rimraf(p)));
 }

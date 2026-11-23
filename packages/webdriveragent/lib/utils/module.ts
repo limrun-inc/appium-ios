@@ -3,7 +3,10 @@ import {fileURLToPath} from 'node:url';
 
 import {fs, node as supportNode} from '@appium/support';
 
-const moduleRoot = supportNode.getModuleRootSync('appium-webdriveragent', fileURLToPath(import.meta.url));
+// Limrun publishes this package as @limrun/appium-webdriveragent, so either name marks the root.
+const moduleRoot =
+  supportNode.getModuleRootSync('appium-webdriveragent', fileURLToPath(import.meta.url)) ??
+  supportNode.getModuleRootSync('@limrun/appium-webdriveragent', fileURLToPath(import.meta.url));
 
 if (!moduleRoot) {
   throw new Error('Cannot find the root folder of the appium-webdriveragent Node.js module');

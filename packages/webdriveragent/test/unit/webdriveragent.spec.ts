@@ -182,6 +182,20 @@ describe('WebDriverAgent', function () {
     });
   });
 
+  describe('use wda url on the default port', function () {
+    // Hosted WDA URLs such as Limrun's use https on 443, which URL parsing drops from `port`.
+    it('should proxy to port 443 for an https url without a port', function () {
+      const args = Object.assign({}, fakeConstructorArgs);
+      args.webDriverAgentUrl = 'https://eu.limrun.net/v1/ios_eu_x/targetHttpPort8100';
+      const agent = new WebDriverAgent(args);
+      assert.strictEqual(agent.url.port, '');
+      (agent as any).setupProxies('mysession');
+      assert.strictEqual(agent.jwproxy?.port, 443);
+      assert.strictEqual(agent.jwproxy?.scheme, 'https');
+      assert.strictEqual(agent.jwproxy?.base, '/v1/ios_eu_x/targetHttpPort8100');
+    });
+  });
+
   describe('get url', function () {
     it('should use default WDA listening url', function () {
       const args = Object.assign({}, fakeConstructorArgs);

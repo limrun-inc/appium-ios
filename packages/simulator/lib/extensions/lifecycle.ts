@@ -5,6 +5,7 @@ import {fs} from '@appium/support';
 import type {StringRecord} from '@appium/types';
 import {waitForCondition, retryInterval} from 'asyncbox';
 
+import {isLimrunSimulator} from '../limrun/index.js';
 import {toSimulatorListEntry} from '../native/device-info.js';
 import type {HasNativeSimctl} from '../native/types.js';
 import type {CoreSimulator, DeviceStat, ShutdownOptions} from '../types.js';
@@ -47,6 +48,10 @@ export async function stat(this: CoreSimulatorWithLifecycle): Promise<DeviceStat
  * @returns True if the current Simulator has never been started before.
  */
 export async function isFresh(this: CoreSimulatorWithLifecycle): Promise<boolean> {
+  if (isLimrunSimulator()) {
+    // Limrun boots the simulator before the session starts, so it is never fresh here.
+    return false;
+  }
   const cachesRoot = path.resolve(this.getDir(), 'Library', 'Caches');
   return (await fs.exists(cachesRoot)) ? (await fs.glob('*', {cwd: cachesRoot})).length === 0 : true;
 }

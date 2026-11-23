@@ -5,6 +5,7 @@ import {timing, util} from '@appium/support';
 import {AsyncLock, waitForCondition} from 'asyncbox';
 import {exec} from 'teen_process';
 
+import {isLimrunSimulator, LimrunUnsupportedError} from '../limrun/index.js';
 import type {HasNativeSimctl} from '../native/types.js';
 import type {CoreSimulator, HasSettings, KillUiClientOptions, RunOptions, StartUiClientOptions} from '../types.js';
 import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, getMacAppPidByPath, getUiClientAppPath} from '../utils/index.js';
@@ -30,6 +31,10 @@ type CoreSimulatorWithUiClient = CoreSimulator & HasSettings & HasNativeSimctl;
  * @returns The process ID or null if the UI client is not running.
  */
 export async function getUIClientPid(this: CoreSimulatorWithUiClient): Promise<string | null> {
+  if (isLimrunSimulator()) {
+    // The Simulator window runs on the Limrun host, never on this machine.
+    return null;
+  }
   const uiClientApp = await getUiClientAppPathCached.call(this);
   const pid = await getMacAppPidByPath(uiClientApp);
   if (pid) {
@@ -68,6 +73,9 @@ function getUiClientLockFilePath(uiClientBundleId: string): string {
  * @param opts - Simulator startup options.
  */
 export async function startUIClient(this: CoreSimulatorWithUiClient, opts: StartUiClientOptions = {}): Promise<void> {
+  if (isLimrunSimulator()) {
+    throw new LimrunUnsupportedError('Starting the Simulator window', 'the Limrun host owns it');
+  }
   const startUiOpts = {
     startupTimeout: this.startupTimeout,
     ...opts,
@@ -111,6 +119,9 @@ export async function launchWindow(
   isUiClientRunning: boolean,
   opts: RunOptions = {},
 ): Promise<void> {
+  if (isLimrunSimulator()) {
+    throw new LimrunUnsupportedError('Opening the Simulator window', 'the Limrun host owns it');
+  }
   // In xcode 11.4, UI Client must be first launched, otherwise
   // sim window stays minimized
   if (!isUiClientRunning) {
@@ -131,6 +142,9 @@ export async function launchWindow(
  * @throws {Error} If killing/quitting the client process fails.
  */
 export async function killUIClient(this: CoreSimulatorWithUiClient, opts: KillUiClientOptions = {}): Promise<boolean> {
+  if (isLimrunSimulator()) {
+    return false;
+  }
   const {pid, signal} = opts;
   const clientPid = pid || (await this.getUIClientPid());
   if (!clientPid) {
@@ -170,6 +184,17 @@ export async function killUIClient(this: CoreSimulatorWithUiClient, opts: KillUi
  * @param opts - One or more of available Simulator options.
  */
 export async function run(this: CoreSimulatorWithUiClient, opts: RunOptions = {}): Promise<void> {
+  if (isLimrunSimulator()) {
+    // Limrun boots the simulator with the instance and owns its window and preferences.
+    const ignored = Object.keys(opts).filter((k) => !['isHeadless', 'startupTimeout'].includes(k));
+    if (ignored.length) {
+      this.log.info(`The Limrun host manages the Simulator window; ignoring ${JSON.stringify(ignored)}`);
+    }
+    if (!(await this.isRunning())) {
+      throw new LimrunUnsupportedError('Booting a simulator', `'${this.udid}' is not booted; create a new instance`);
+    }
+    return;
+  }
   const runOpts: RunOptions = {
     isHeadless: false,
     startupTimeout: this.startupTimeout,

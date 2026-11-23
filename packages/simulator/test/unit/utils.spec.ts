@@ -47,10 +47,7 @@ mock.module('teen_process', {
 });
 mock.module('appium-xcode', {
   namedExports: {
-    getPath: appiumXcode.getPath,
-    getClangVersion: appiumXcode.getClangVersion,
-    getMaxIOSSDK: appiumXcode.getMaxIOSSDK,
-    getMaxTVOSSDK: appiumXcode.getMaxTVOSSDK,
+    ...appiumXcode,
     getVersion: (...args: any[]) => currentGetVersion(...args),
   },
 });

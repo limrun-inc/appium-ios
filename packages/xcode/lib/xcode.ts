@@ -1,11 +1,8 @@
-import path from 'node:path';
-
-import {fs, logger, util} from '@appium/support';
+import {logger, util} from '@appium/support';
 import {retry} from 'asyncbox';
 import * as semver from 'semver';
-import {exec} from 'teen_process';
 
-import {runXcrunCommand, findAppPaths, XCRUN_TIMEOUT, readXcodePlist} from './helpers.js';
+import {runXcrunCommand, runXcodebuildVersion, XCRUN_TIMEOUT, readXcodePlist} from './helpers.js';
 import type {XcodeVersion} from './types.js';
 
 const DEFAULT_NUMBER_OF_RETRIES = 2;
@@ -21,44 +18,11 @@ const log = logger.getLogger('Xcode');
  * @throws {Error} If it is not possible to retrieve a proper path
  */
 export async function getPathFromXcodeSelect(timeout: number = XCRUN_TIMEOUT): Promise<string> {
-  const generateErrorMessage = async (prefix: string): Promise<string> => {
-    const xcodePaths = await findAppPaths(XCODE_BUNDLE_ID);
-    if (!xcodePaths.length) {
-      return `${prefix}. Consider installing Xcode to address this issue.`;
-    }
-
-    const proposals = xcodePaths.map((p) => `    sudo xcode-select -s "${path.join(p, 'Contents', 'Developer')}"`);
-    return (
-      `${prefix}. ` +
-      `Consider running${proposals.length > 1 ? ' any of' : ''}:\n${proposals.join('\n')}\nto address this issue.`
-    );
-  };
-
-  let stdout: string;
-  try {
-    ({stdout} = await exec('xcode-select', ['--print-path'], {timeout}));
-  } catch (e) {
-    const stderr = e && typeof e === 'object' && 'stderr' in e ? String((e as {stderr: unknown}).stderr) : '';
-    const message = e instanceof Error ? e.message : String(e);
-    const msg =
-      `Cannot determine the path to Xcode by running 'xcode-select -p' command. ` +
-      `Original error: ${stderr || message}`;
-    throw new Error(msg, {cause: e});
-  }
-  // trim and remove trailing slash
-  const developerRoot = String(stdout).replace(/\/$/, '').trim();
-  if (!developerRoot) {
-    const msg = await generateErrorMessage(`'xcode-select -p' returned an empty string`);
-    throw new Error(msg);
-  }
-  // xcode-select might also return a path to command line tools
-  const {CFBundleIdentifier} = await readXcodePlist(developerRoot);
-  if (CFBundleIdentifier === XCODE_BUNDLE_ID) {
-    return developerRoot;
-  }
-
-  const msg = await generateErrorMessage(`'${developerRoot}' is not a valid Xcode path`);
-  throw new Error(msg);
+  // The Limrun host allows only SDK version queries, so the developer path stays unknown.
+  throw new Error(
+    `The Xcode developer path (timeout ${timeout}ms) is not available on Limrun simulators: ` +
+      `Xcode runs on the Limrun host, not on this machine`,
+  );
 }
 
 /**
@@ -141,19 +105,8 @@ export async function getVersion(
  * if CLT are not installed.
  */
 export async function getClangVersion(): Promise<string | null> {
-  try {
-    await fs.which('clang');
-  } catch {
-    log.info('Cannot find clang executable on the local system. Are Xcode Command Line Tools installed?');
-    return null;
-  }
-  const {stdout} = await exec('clang', ['--version']);
-  const match = /clang-([0-9.]+)/.exec(stdout);
-  if (!match) {
-    log.info(`Cannot parse clang version from ${stdout}`);
-    return null;
-  }
-  return match[1];
+  log.info('The Clang version is not available on Limrun simulators: Xcode runs on the Limrun host');
+  return null;
 }
 
 /**
@@ -231,10 +184,13 @@ export const getMaxTVOSSDK = util.memoize(async function getMaxTVOSSDK(
  * @throws {Error} If there was a failure while retrieving the version
  */
 async function getVersionWithoutRetry(timeout: number = XCRUN_TIMEOUT): Promise<semver.SemVer | null> {
-  const developerPath = await getPath(timeout);
-  // we want to read the CFBundleShortVersionString from Xcode's plist.
-  const {CFBundleShortVersionString} = await readXcodePlist(developerPath);
-  return semver.coerce(CFBundleShortVersionString);
+  // `xcodebuild -version` prints "Xcode 26.1" on its first line.
+  const stdout = await runXcodebuildVersion(timeout);
+  const match = /Xcode\s+([\d.]+)/.exec(stdout);
+  if (!match) {
+    throw new Error(`Cannot parse the Xcode version from 'xcodebuild -version' output: ${stdout}`);
+  }
+  return semver.coerce(match[1]);
 }
 
 /**
