@@ -70,6 +70,10 @@ class FakeInstance {
       setOrientation: async (o: string) => {
         this.actions.push({setOrientation: o});
       },
+      setPermission: async (bundleId: string, service: string, status: string) => {
+        this.actions.push({setPermission: [bundleId, service, status]});
+      },
+      getPermission: async () => 'limited',
       performActions: async (actions: unknown[]) => {
         this.actions.push(...actions);
         return {results: []};
@@ -181,10 +185,19 @@ describe('LimrunNativeSimctl', function () {
     ]);
   });
 
-  it('grants permissions simctl knows and refuses the rest', async function () {
-    await simctl.grantPermission(UDID, 'medialibrary', 'com.example.app');
-    assert.deepEqual(instance.calls[0].args, ['privacy', UDID, 'grant', 'media-library', 'com.example.app']);
-    await assert.rejects(simctl.grantPermission(UDID, 'camera', 'com.example.app'), LimrunUnsupportedError);
+  it('sets and reads permissions on the instance', async function () {
+    await simctl.grantPermission(UDID, 'faceid', 'com.example.app');
+    await simctl.grantPermission(UDID, 'photos', 'com.example.app', 'limited');
+    await simctl.revokePermission(UDID, 'notifications', 'com.example.app');
+    await simctl.resetPermission(UDID, 'camera', 'com.example.app');
+    assert.deepEqual(instance.actions, [
+      {setPermission: ['com.example.app', 'faceid', 'granted']},
+      {setPermission: ['com.example.app', 'photos', 'limited']},
+      {setPermission: ['com.example.app', 'notifications', 'denied']},
+      {setPermission: ['com.example.app', 'camera', 'unset']},
+    ]);
+    assert.equal(await simctl.getPermission(UDID, 'photos', 'com.example.app'), 'limited');
+    await assert.rejects(simctl.getPermission(UDID, 'notifications', 'com.example.app'), /cannot be read/);
   });
 
   it('reports running apps as processes', async function () {
@@ -196,17 +209,17 @@ describe('LimrunNativeSimctl', function () {
   it('maps the interface orientation by name', async function () {
     assert.equal(await simctl.getOrientation(UDID), DeviceOrientation.LandscapeLeft);
     await simctl.setOrientation(UDID, DeviceOrientation.LandscapeRight);
-    assert.deepEqual(instance.actions, [{setOrientation: 'Landscape'}]);
+    await simctl.setOrientation(UDID, DeviceOrientation.PortraitUpsideDown);
+    assert.deepEqual(instance.actions, [{setOrientation: 'LandscapeRight'}, {setOrientation: 'PortraitUpsideDown'}]);
   });
 
-  it('presses the home button for the consumer menu usage', async function () {
-    await simctl.pressHidButton(UDID, 12, 64, 0.2);
+  it('presses any HID usage on the instance', async function () {
+    await simctl.pressHidButton(UDID, 12, 111, 0.2);
     assert.deepEqual(instance.actions, [
-      {type: 'buttonDown', button: 'home'},
+      {type: 'usageDown', usagePage: 12, usage: 111},
       {type: 'wait', durationMs: 200},
-      {type: 'buttonUp', button: 'home'},
+      {type: 'usageUp', usagePage: 12, usage: 111},
     ]);
-    await assert.rejects(simctl.pressHidButton(UDID, 11, 33), LimrunUnsupportedError);
   });
 
   it('takes full-size PNG screenshots by default', async function () {

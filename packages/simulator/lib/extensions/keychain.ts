@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import {fs, mkdirp, tempDir, util} from '@appium/support';
+import {limrunClientFor} from 'appium-xcode';
 import {exec} from 'teen_process';
 
 import {isLimrunSimulator, LimrunUnsupportedError} from '../limrun/index.js';
@@ -130,7 +131,9 @@ export async function restoreKeychains(
  */
 export async function clearKeychains(this: CoreSimulatorWithKeychain): Promise<void> {
   if (isLimrunSimulator()) {
-    throw new LimrunUnsupportedError('Clearing keychains');
+    // The instance wipes the keychain with simctl and puts back the CA certificates it installed.
+    await limrunClientFor(this.udid).resetKeychain();
+    return;
   }
   const plistPath = path.resolve(await this.getLaunchDaemonsRoot(), 'com.apple.securityd.plist');
   if (!(await fs.exists(plistPath))) {

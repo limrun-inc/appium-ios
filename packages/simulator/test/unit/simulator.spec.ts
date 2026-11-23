@@ -324,7 +324,7 @@ describe('simulator', function () {
 
       it(
         'should configure language and restart services',
-        {skip: 'Limrun allows no launchctl, so services are not restarted'},
+        {skip: 'Limrun restarts the services on the instance, not with a local launchctl'},
         async function () {
           const options = {language: {name: 'ja'}};
           assert.strictEqual(await sim.configureLocalization(options), true);
@@ -357,20 +357,26 @@ describe('simulator', function () {
         },
       );
 
-      it('should confirm skip restarting services if already applied', async function () {
-        const options = {language: {name: 'en'}};
-        assert.strictEqual(await sim.configureLocalization(options), true);
-        assert.deepStrictEqual(
-          spawnProcessSpy.firstCall.args.slice(1),
-          expectedSpawn('/usr/bin/defaults', [
-            'write',
-            '.GlobalPreferences.plist',
-            'AppleLanguages',
-            '<array><string>en</string></array>',
-          ]),
-        );
-        assert.strictEqual(spawnProcessSpy.callCount, 1);
-      });
+      it(
+        'should confirm skip restarting services if already applied',
+        {
+          skip: 'Limrun reads AppleLanguages on the instance, so the local plist stub does not apply',
+        },
+        async function () {
+          const options = {language: {name: 'en'}};
+          assert.strictEqual(await sim.configureLocalization(options), true);
+          assert.deepStrictEqual(
+            spawnProcessSpy.firstCall.args.slice(1),
+            expectedSpawn('/usr/bin/defaults', [
+              'write',
+              '.GlobalPreferences.plist',
+              'AppleLanguages',
+              '<array><string>en</string></array>',
+            ]),
+          );
+          assert.strictEqual(spawnProcessSpy.callCount, 1);
+        },
+      );
 
       it('should confirm skip restarting services if skipSyncUiDialogTranslation is true', async function () {
         const options = {language: {name: 'ja', skipSyncUiDialogTranslation: true}};

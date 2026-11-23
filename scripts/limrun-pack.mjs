@@ -46,7 +46,11 @@ try {
     const pkg = JSON.parse(manifests[dir].original);
     pkg.name = names[pkg.name].name;
     pkg.version = limVersion(pkg);
-    pkg.repository = {type: 'git', url: 'git+https://github.com/limrun-inc/appium-ios.git', directory: `packages/${dir}`};
+    pkg.repository = {
+      type: 'git',
+      url: 'git+https://github.com/limrun-inc/appium-ios.git',
+      directory: `packages/${dir}`,
+    };
     pkg.bugs = {url: 'https://github.com/limrun-inc/appium-ios/issues'};
     // Code imports the upstream names, so forked dependencies stay installed under them.
     for (const [dep, renamed] of Object.entries(names)) {
@@ -63,7 +67,7 @@ try {
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     const [{filename}] = JSON.parse(stdout.slice(stdout.indexOf('[')));
-    console.log(path.join(out, filename));
+    process.stdout.write(`${path.join(out, filename)}\n`);
   }
 } finally {
   for (const {file, original} of Object.values(manifests)) {

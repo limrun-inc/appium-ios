@@ -314,11 +314,8 @@ export async function configureLocalization(
           `see https://github.com/appium/appium/issues/19440 for more details`,
       );
       if (isLimrunSimulator()) {
-        // The instance allows no launchctl, so the services keep their old language until they restart.
-        this.log.info(
-          `Limrun cannot restart ${SERVICES_FOR_TRANSLATION} to sync UI dialog translation; ` +
-            `some system UI alerts may stay untranslated`,
-        );
+        // The instance restarts its own services; there is no launchctl to spawn.
+        await limrunClientFor(this.udid).restartServices([...SERVICES_FOR_TRANSLATION]);
       } else {
         await Promise.all(
           SERVICES_FOR_TRANSLATION.map((service) =>

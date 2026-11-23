@@ -46,17 +46,12 @@ export class LimrunUnsupportedError extends Error {
   }
 }
 
-// `simctl privacy` names for the services Apple's CLI handles. Other services live in TCC.db
-// or SpringBoard's store on the host, which a Limrun instance does not expose.
-const PRIVACY_SERVICES: Partial<Record<SimPermissionService, string>> = {
-  calendar: 'calendar',
-  contacts: 'contacts',
-  medialibrary: 'media-library',
-  microphone: 'microphone',
-  motion: 'motion',
-  photos: 'photos',
-  reminders: 'reminders',
-  siri: 'siri',
+// The SDK's orientation names, which the instance reports back as camelCase `deviceInfo` names.
+const SDK_ORIENTATIONS: Record<DeviceOrientation, Ios.DeviceOrientation> = {
+  [DeviceOrientation.Portrait]: 'Portrait',
+  [DeviceOrientation.PortraitUpsideDown]: 'PortraitUpsideDown',
+  [DeviceOrientation.LandscapeRight]: 'LandscapeRight',
+  [DeviceOrientation.LandscapeLeft]: 'LandscapeLeft',
 };
 
 // Darwin notifications the simulator posts for biometrics and shake, as `simctl spawn notifyutil` names them.
@@ -82,15 +77,6 @@ const CONTENT_SIZES = [
   'accessibility-extra-extra-large',
   'accessibility-extra-extra-extra-large',
 ];
-
-// HID usages the Limrun instance presses as named buttons, keyed by `page:usage`.
-const HID_BUTTONS: Record<string, string> = {
-  '12:64': 'home', // Consumer page, Menu
-  '12:48': 'lock', // Consumer page, Power
-  '12:233': 'volumeUp',
-  '12:234': 'volumeDown',
-};
-const HID_KEYBOARD_PAGE = 7;
 
 const DEVICE_STATES: Record<string, SimDeviceState> = {
   Creating: SimDeviceState.Creating,
@@ -468,10 +454,7 @@ export class LimrunNativeSimctl implements NativeSimctlApi {
       await client(udid).setDuoOrientation(DUO_ORIENTATIONS[orientation]);
       return;
     }
-    if (orientation === DeviceOrientation.PortraitUpsideDown) {
-      throw new LimrunUnsupportedError('Upside-down orientation', 'use portrait or landscape');
-    }
-    await client(udid).setOrientation(orientation === DeviceOrientation.Portrait ? 'Portrait' : 'Landscape');
+    await client(udid).setOrientation(SDK_ORIENTATIONS[orientation]);
   }
 
   async getOrientation(udid: string): Promise<DeviceOrientation> {
@@ -481,28 +464,36 @@ export class LimrunNativeSimctl implements NativeSimctlApi {
 
   // permissions
 
+  // The instance writes TCC.db and SpringBoard's notification store itself, the way coresim does
+  // on a local host. A notifications change restarts SpringBoard and returns once it is back.
+
   async grantPermission(
     udid: string,
     service: SimPermissionService,
     bundleId: string,
     status: 'granted' | 'limited' | 'critical' = 'granted',
   ): Promise<void> {
-    if (status !== 'granted') {
-      throw new LimrunUnsupportedError(`The '${status}' permission status`);
-    }
-    await simctl(udid, ['privacy', udid, 'grant', privacyService(service), bundleId]);
+    await client(udid).setPermission(bundleId, service, status);
   }
 
   async revokePermission(udid: string, service: SimPermissionService, bundleId: string): Promise<void> {
-    await simctl(udid, ['privacy', udid, 'revoke', privacyService(service), bundleId]);
+    await client(udid).setPermission(bundleId, service, 'denied');
   }
 
   async resetPermission(udid: string, service: SimPermissionService, bundleId: string): Promise<void> {
-    await simctl(udid, ['privacy', udid, 'reset', privacyService(service), bundleId]);
+    await client(udid).setPermission(bundleId, service, 'unset');
   }
 
-  async getPermission(udid: string, service: SimPermissionService): Promise<SimPermissionStatus> {
-    throw new LimrunUnsupportedError(`Reading the '${service}' permission on '${udid}'`);
+  async getPermission(udid: string, service: SimPermissionService, bundleId: string): Promise<SimPermissionStatus> {
+    if (service === 'notifications') {
+      throw new Error(`The status of the 'notifications' permission cannot be read`);
+    }
+    const status = await client(udid).getPermission(bundleId, service);
+    if (status === 'critical') {
+      // Only notifications have a critical status, and they cannot be read.
+      throw new Error(`Unexpected '${status}' status of the '${service}' permission`);
+    }
+    return status;
   }
 
   // process
@@ -626,20 +617,12 @@ export class LimrunNativeSimctl implements NativeSimctlApi {
   // hid
 
   async pressHidButton(udid: string, page: number, usage: number, duration: number = 0.1): Promise<void> {
-    const waitAction = {type: 'wait' as const, durationMs: Math.round(duration * 1000)};
-    if (page === HID_KEYBOARD_PAGE) {
-      await client(udid).performActions([
-        {type: 'keyDown', keyCode: usage},
-        waitAction,
-        {type: 'keyUp', keyCode: usage},
-      ]);
-      return;
-    }
-    const button = HID_BUTTONS[`${page}:${usage}`];
-    if (!button) {
-      throw new LimrunUnsupportedError(`The HID usage ${usage} on page ${page}`, 'use home, lock or volume buttons');
-    }
-    await client(udid).performActions([{type: 'buttonDown', button}, waitAction, {type: 'buttonUp', button}]);
+    // The instance sends keyboard-page usages as key events and other pages as raw usages.
+    await client(udid).performActions([
+      {type: 'usageDown', usagePage: page, usage},
+      {type: 'wait', durationMs: Math.round(duration * 1000)},
+      {type: 'usageUp', usagePage: page, usage},
+    ]);
   }
 }
 
@@ -674,17 +657,6 @@ async function simctl(udid: string, args: string[], stdin?: string): Promise<{st
 
 async function simctlJson(udid: string, args: string[]): Promise<unknown> {
   return JSON.parse((await simctl(udid, args)).stdout);
-}
-
-function privacyService(service: SimPermissionService): string {
-  const name = PRIVACY_SERVICES[service];
-  if (!name) {
-    throw new LimrunUnsupportedError(
-      `The '${service}' permission`,
-      `supported services are ${Object.keys(PRIVACY_SERVICES).join(', ')}`,
-    );
-  }
-  return name;
 }
 
 function toPem(cert: string | Buffer): string {
