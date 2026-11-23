@@ -112,16 +112,18 @@ describe('parseAsciiPlist', function () {
 
 describe('LimrunNativeSimctl', function () {
   let instance: FakeInstance;
+  let client: Ios.InstanceClient;
   let simctl: LimrunNativeSimctl;
 
   beforeEach(function () {
     instance = new FakeInstance();
-    registerLimrunClient(UDID, instance.client());
+    client = instance.client();
+    registerLimrunClient(UDID, client);
     simctl = new LimrunNativeSimctl();
   });
 
   afterEach(function () {
-    unregisterLimrunClient(UDID);
+    unregisterLimrunClient(UDID, client);
   });
 
   it('lists the instance simulator with its runtime', async function () {

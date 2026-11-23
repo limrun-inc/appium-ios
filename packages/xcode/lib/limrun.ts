@@ -17,9 +17,17 @@ export function registerLimrunClient(udid: string, client: Ios.InstanceClient): 
   clients.set(key(udid), client);
 }
 
-/** Forgets the client of the given udid, usually when its session ends. */
-export function unregisterLimrunClient(udid: string): void {
-  clients.delete(key(udid));
+/**
+ * Forgets the client of the given udid when its session ends.
+ *
+ * Only the registered client is removed. A session that ends after a newer
+ * session on the same instance registered its own client, such as an abandoned
+ * session reaching its command timeout, leaves the newer client in place.
+ */
+export function unregisterLimrunClient(udid: string, client: Ios.InstanceClient): void {
+  if (clients.get(key(udid)) === client) {
+    clients.delete(key(udid));
+  }
 }
 
 /**
