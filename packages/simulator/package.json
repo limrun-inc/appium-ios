@@ -58,7 +58,7 @@
   "devDependencies": {
     "@appium/tsconfig": "^1.2.0",
     "@appium/types": "^1.7.2",
-    "@limrun/api": "^0.73.4",
+    "@limrun/api": "^0.77.0",
     "@types/node": "^26.6.5",
     "@types/sinon": "^22.0.2",
     "pem": "^1.8.3",
